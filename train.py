@@ -23,7 +23,7 @@ def main():
         DEVICE = torch.device("cpu")
 
     # --- DATA ---
-    DATA_PATH = "./data/LibriTTS" # Ensure this path is correct relative to train.py
+    DATA_PATH = "./data/LibriSpeech/test-other" # Ensure this path is correct relative to train.py
 
     if not os.path.exists(DATA_PATH):
         print(f"ERROR: Dataset path '{DATA_PATH}' not found.")

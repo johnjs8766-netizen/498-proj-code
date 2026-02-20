@@ -17,6 +17,11 @@ class MultiResolutionSTFTLoss(nn.Module):
             real_stft = torch.stft(x_real, fs, hs, wl, window, return_complex=True).abs() + 1e-7
             fake_stft = torch.stft(x_fake, fs, hs, wl, window, return_complex=True).abs() + 1e-7
             
+            if (real_stft == 0).any():
+                print("Real stft has 0")
+            if (fake_stft == 0).any():
+                print("Fake stft has 0")
+                
             # Spectral Convergence + Log Magnitude
             loss += torch.norm(real_stft - fake_stft, 'fro') / torch.norm(real_stft, 'fro')
             loss += F.l1_loss(torch.log(real_stft), torch.log(fake_stft))

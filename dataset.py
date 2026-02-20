@@ -26,7 +26,7 @@ class LibriTTSDataset(Dataset):
         for root, dirs, files in os.walk(root_dir):
             for file in files:
                 # Strictly filter for .wav (ignores .txt files shown in your screenshot)
-                if file.endswith(".wav") and not file.startswith("._"): 
+                if (file.endswith(".wav") or file.endswith(".flac")) and not file.startswith("._"): 
                     self.audio_files.append(os.path.join(root, file))
         
         if len(self.audio_files) == 0:

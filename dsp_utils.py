@@ -78,72 +78,78 @@ def lpc_to_lsf(lpc_coeffs):
     return torch.tensor(np.array(lsfs), dtype=torch.float32, device=device)
 
 # --- 3. Differentiable Synthesis (LSF -> LPC) ---
-def lsf_to_lpc_diff(lsf):
+def lsf_to_lpc_diff(lsf: torch.Tensor) -> torch.Tensor:
     """
-    True Differentiable LSF to LPC conversion.
-    Expands the polynomials P(z) and Q(z) from roots.
+    Stable double-precision LSF -> LPC conversion.
+
+    Args:
+        lsf: [B, p] (p must be even)
+
+    Returns:
+        a_coeffs: [B, p+1]
     """
-    batch_size, order = lsf.shape
+
+    B, p = lsf.shape
+    assert p % 2 == 0, "LPC order must be even"
+
     device = lsf.device
-    
-    # 1. Convert LSF (radians) to LSP (cosines)
-    qs = torch.cos(lsf)
-    
-    # 2. Separate into P (odd) and Q (even) lines
-    # qs are sorted w1, w2, w3...
-    q_odd = qs[:, 0::2]  # w1, w3, w5...
-    q_even = qs[:, 1::2] # w2, w4, w6...
-    
-    # 3. Construct Polynomials P(z) and Q(z)
-    # P(z) = (1 - z^-1) * Prod(1 - 2*q_odd*z^-1 + z^-2)
-    # Q(z) = (1 + z^-1) * Prod(1 - 2*q_even*z^-1 + z^-2)
-    
-    # Helper to expand product of quadratic terms
-    def expand_roots(roots):
-        # roots shape: [Batch, N_sections]
-        n_sect = roots.shape[1]
-        
-        # Start with [1.0]
-        # We process effectively by expanding (1 - 2r z^-1 + z^-2)
-        # Using a specialized loop for gradients
-        
-        # Initialize polynomial [Batch, 1] -> 1.0
-        poly = torch.ones(batch_size, 1, device=device)
-        
-        for i in range(n_sect):
-            r = roots[:, i:i+1] # current root cosine
-            
-            # Current polynomial coefficients
-            # Multiply poly by (1, -2r, 1)
-            # Equivalent to:
-            # new[n] = old[n] - 2r*old[n-1] + old[n-2]
-            
-            # Pad poly for shifting
-            p_0 = torch.cat([poly, torch.zeros(batch_size, 2, device=device)], dim=1)
-            p_1 = torch.cat([torch.zeros(batch_size, 1, device=device), poly, torch.zeros(batch_size, 1, device=device)], dim=1)
-            p_2 = torch.cat([torch.zeros(batch_size, 2, device=device), poly], dim=1)
-            
-            poly = p_0 - (2 * r * p_1) + p_2
-            
+    lsf = lsf.double()
+
+    # Convert to cosines
+    cos_lsf = torch.cos(lsf)
+
+    # Split
+    cos_odd = cos_lsf[:, 0::2]
+    cos_even = cos_lsf[:, 1::2]
+
+    def build_poly(cos_vals):
+        """
+        Build ∏ (1 - 2c z^-1 + z^-2)
+        Returns [B, p/2*2 + 1]
+        """
+        B, n = cos_vals.shape
+        poly = torch.ones(B, 1, dtype=torch.float64, device=device)
+
+        for i in range(n):
+            c = cos_vals[:, i:i+1]  # [B,1]
+
+            # Quadratic section
+            section = torch.cat([
+                torch.ones_like(c),
+                -2*c,
+                torch.ones_like(c)
+            ], dim=1)  # [B,3]
+
+            # Standard convolution (manual, stable)
+            L = poly.shape[1]
+            new_poly = torch.zeros(B, L+2, dtype=torch.float64, device=device)
+
+            for k in range(3):
+                new_poly[:, k:k+L] += section[:, k:k+1] * poly
+
+            poly = new_poly
+
         return poly
 
-    p_poly = expand_roots(q_odd)
-    q_poly = expand_roots(q_even)
-    
-    # 4. Apply boundary conditions
-    # P(z) *= (1 - z^-1)
-    p_final = torch.cat([p_poly, torch.zeros(batch_size, 1, device=device)], dim=1) - \
-              torch.cat([torch.zeros(batch_size, 1, device=device), p_poly], dim=1)
-              
-    # Q(z) *= (1 + z^-1)
-    q_final = torch.cat([q_poly, torch.zeros(batch_size, 1, device=device)], dim=1) + \
-              torch.cat([torch.zeros(batch_size, 1, device=device), q_poly], dim=1)
-              
-    # 5. A(z) = 0.5 * (P(z) + Q(z))
-    a_coeffs = 0.5 * (p_final + q_final)
-    
-    # Ignore the very last coefficient which is usually 0 due to order matching
-    return a_coeffs[:, :-1] 
+    P = build_poly(cos_odd)
+    Q = build_poly(cos_even)
+
+    # Multiply P by (1 - z^-1)
+    P = F.pad(P, (0,1)) - F.pad(P, (1,0))
+
+    # Multiply Q by (1 + z^-1)
+    Q = F.pad(Q, (0,1)) + F.pad(Q, (1,0))
+
+    # Combine
+    A = 0.5 * (P + Q)
+
+    # A should now be length p+1
+    A = A[:, :p+1]
+
+    # Force a0 = 1
+    A[:, 0] = 1.0
+
+    return A.float()
 
 # --- 4. MicPro Transform ---
 def micpro_transform(lsf, params):
