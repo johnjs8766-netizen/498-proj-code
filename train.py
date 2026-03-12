@@ -11,10 +11,13 @@ from models import PluginSEANetGenerator, SOTAAudioDetector
 from losses import MultiResolutionSTFTLoss
 
 def train():
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training on: {device}")
-    
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+        
     batch_size = 32  
     epochs = 30
     lr_G, lr_D = 2e-4, 1e-5 
