@@ -1,0 +1,12 @@
+torch==2.2.0 
+torchvision 
+torchaudio 
+"transformers==4.35.0" 
+sentencepiece 
+"tensorflow==2.15.0" 
+ml-dtypes 
+numpy 
+matplotlib 
+librosa 
+soundfile 
+tqdm

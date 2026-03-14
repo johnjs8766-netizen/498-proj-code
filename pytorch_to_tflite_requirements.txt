@@ -1,0 +1,3 @@
+litert-torch        
+torchaudio
+ml-dtypes>=0.5.1
