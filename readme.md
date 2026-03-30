@@ -100,7 +100,7 @@ A user watermarks audio with:
 - the public encoder
 - their own secret key file
 
-For example, if user's ID is 3, then execute the script by:
+For example, if user's ID is 3, then execute the following script:
 
 ```bash
 python test_with_external_key.py --input_audio sample.wav --key_path user_keys/user_3_secret.pt --public_generator_ckpt exported_public_model/public_generator.pth --detector_ckpt checkpoints/stageC_blind_detector_epoch_8.pth --output_audio outputs/test_user3_watermarked.wav
